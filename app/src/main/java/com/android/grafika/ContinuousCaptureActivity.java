@@ -55,6 +55,8 @@ import java.lang.ref.WeakReference;
  * notified.  That can happen on an arbitrary thread, so we use it to send a message
  * through our Handler.  That causes us to render the new frame to the display and to
  * our video encoder.
+ *
+ * 摄像头预览在OpenGl纹理，OPenGl实现绘制在SurfaceView和MediaCodec的InputSurface（实现编码）
  */
 public class ContinuousCaptureActivity extends Activity implements SurfaceHolder.Callback,
         SurfaceTexture.OnFrameAvailableListener {
@@ -69,7 +71,7 @@ public class ContinuousCaptureActivity extends Activity implements SurfaceHolder
     private SurfaceTexture mCameraTexture;  // receives the output from the camera preview
     private FullFrameRect mFullFrameBlit;
     private final float[] mTmpMatrix = new float[16];
-    private int mTextureId;
+    private int mTextureId;//OpenGl层提供的纹理
     private int mFrameNum;
 
     private Camera mCamera;
@@ -388,7 +390,7 @@ public class ContinuousCaptureActivity extends Activity implements SurfaceHolder
 
         mFullFrameBlit = new FullFrameRect(
                 new Texture2dProgram(Texture2dProgram.ProgramType.TEXTURE_EXT));
-        mTextureId = mFullFrameBlit.createTextureObject();
+        mTextureId = mFullFrameBlit.createTextureObject();//通过OpenGL创建纹理
         mCameraTexture = new SurfaceTexture(mTextureId);
         mCameraTexture.setOnFrameAvailableListener(this);
 
@@ -399,15 +401,15 @@ public class ContinuousCaptureActivity extends Activity implements SurfaceHolder
         if (mCamera != null) {
             Log.d(TAG, "starting camera preview");
             try {
-                mCamera.setPreviewTexture(mCameraTexture);
+                mCamera.setPreviewTexture(mCameraTexture); //摄像头的预览在OpenGl创建的纹理上
             } catch (IOException ioe) {
                 throw new RuntimeException(ioe);
             }
-            mCamera.startPreview();
+            mCamera.startPreview(); //开始预览
         }
 
-        // TODO: adjust bit rate based on frame rate?
-        // TODO: adjust video width/height based on what we're getting from the camera preview?
+        // TODO: adjust bit rate based on frame rate? 实际上，应该根据真实的帧率，调整码率
+        // TODO: adjust video width/height based on what we're getting from the camera preview? 实际上，编码器的宽高，应该是摄像头预览的宽高
         //       (can we guarantee that camera preview size is compatible with AVC video encoder?)
         try {
             mCircEncoder = new CircularEncoder(VIDEO_WIDTH, VIDEO_HEIGHT, 6000000,
@@ -470,7 +472,7 @@ public class ContinuousCaptureActivity extends Activity implements SurfaceHolder
 
         // Latch the next frame from the camera.
         mDisplaySurface.makeCurrent();
-        mCameraTexture.updateTexImage();
+        mCameraTexture.updateTexImage(); //上传到OPenGl 纹理
         mCameraTexture.getTransformMatrix(mTmpMatrix);
 
         // Fill the SurfaceView with it.
@@ -478,12 +480,12 @@ public class ContinuousCaptureActivity extends Activity implements SurfaceHolder
         int viewWidth = sv.getWidth();
         int viewHeight = sv.getHeight();
         GLES20.glViewport(0, 0, viewWidth, viewHeight);
-        mFullFrameBlit.drawFrame(mTextureId, mTmpMatrix);
+        mFullFrameBlit.drawFrame(mTextureId, mTmpMatrix); //绘制到SurfaceView
         drawExtra(mFrameNum, viewWidth, viewHeight);
         mDisplaySurface.swapBuffers();
 
         // Send it to the video encoder.
-        if (!mFileSaveInProgress) {
+        if (!mFileSaveInProgress) { //若是录制视频中，则切换EGLSurface到编码器的输入Surface,再次绘制。
             mEncoderSurface.makeCurrent();
             GLES20.glViewport(0, 0, VIDEO_WIDTH, VIDEO_HEIGHT);
             mFullFrameBlit.drawFrame(mTextureId, mTmpMatrix);

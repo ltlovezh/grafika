@@ -45,6 +45,17 @@ import com.android.grafika.gles.WindowSurface;
  * To watch this in systrace, use
  * <code>systrace.py --app=com.android.grafika gfx view sched dalvik</code>
  * (most interesting while bouncing).
+ *
+ * 1.设置3个SurfaceView的层次关系
+ * 2.通过Surface.lockCanvas获得Canvas，然后进行软件绘制。
+ * 3.或者通过OPenGL对SurfaceView的Surface进行硬件绘制。
+ *
+ * 正常情况下,假设有三个SurfaceView，
+ * 1.默认情况下，SurfaceViewA在App Window下面。
+ * 2.SurfaceViewB设置了setZOrderMediaOverlay，所以SurfaceViewB位于SurfaceViewA上面，但是位于App Window下面。
+ * 3.SurfaceViewC设置了setZOrderOnTop，SurfaceViewC位于App Window的上面。
+ *
+ * 所以从层次从低到高，分别是SurfaceViewA < SurfaceViewB < SurfaceViewC < App Window
  */
 public class MultiSurfaceActivity extends Activity implements SurfaceHolder.Callback {
     private static final String TAG = MainActivity.TAG;

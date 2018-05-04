@@ -45,6 +45,8 @@ import java.io.IOException;
  * <p>
  * TODO: investigate crash when screen is rotated while movie is playing (need
  *       to have onPause() wait for playback to stop)
+ * Tip:本实例是使用MediaCodec解码H264和H265视频，然后在TextureView上展示。
+ * adjustAspectRatio负责调整Texture的宽高（通过Matrix），以实现和视频的宽高是相同的比例。
  */
 public class PlayMovieActivity extends Activity implements OnItemSelectedListener,
         TextureView.SurfaceTextureListener, MoviePlayer.PlayerFeedback {

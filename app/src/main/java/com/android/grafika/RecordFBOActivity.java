@@ -92,6 +92,12 @@ import java.lang.ref.WeakReference;
  * evaluating simultaneous video playback and recording.
  * <p>
  * TODO: show the MP4 file name somewhere in the UI so people can find it in the player
+ *
+ * 录制时的3种实现方式：
+ * 1.draw两次：1.draw到SurfaceView，用于展示   2.draw到编码器的InputSurface，用于数据的编码输入
+ * 2.通过FBO，draw到FBO的颜色附着点，生成一个纹理，然后分别把纹理draw到SurfaceView，用于展示；draw到编码器的InputSurface，用于数据的编码输入
+ * 3.基于OPenGl ES 3的glBlitFramebuffer方法，首先把图形draw到SurfaceView的EGLSurface，然后把SurfaceView的EGLSurface设置为读Surface，把编码器的InputSurface设置为写Surface
+ * 然后通过glBlitFramebuffer方法把数据从读Surface传送到写Surface。这样SurfaceView的EGLSurface和编码器的InputSurface都拥有了数据。
  */
 public class RecordFBOActivity extends Activity implements SurfaceHolder.Callback,
         Choreographer.FrameCallback {
@@ -414,7 +420,7 @@ public class RecordFBOActivity extends Activity implements SurfaceHolder.Callbac
 
         private volatile SurfaceHolder mSurfaceHolder;  // may be updated by UI thread
         private EglCore mEglCore;
-        private WindowSurface mWindowSurface;
+        private WindowSurface mWindowSurface; //SurfaceView的EGLSurface
         private FlatShadedProgram mProgram;
 
         // Orthographic projection matrix.
@@ -437,14 +443,14 @@ public class RecordFBOActivity extends Activity implements SurfaceHolder.Callbac
         private long mPrevTimeNanos;
 
         // FPS / drop counter.
-        private long mRefreshPeriodNanos;
+        private long mRefreshPeriodNanos; //每一帧的刷新间隔时间（纳秒）
         private long mFpsCountStartNanos;
         private int mFpsCountFrame;
         private int mDroppedFrames;
         private boolean mPreviousWasDropped;
 
         // Used for off-screen rendering.
-        private int mOffscreenTexture;
+        private int mOffscreenTexture; //自定义FBO的颜色附着点
         private int mFramebuffer;
         private int mDepthBuffer;
         private FullFrameRect mFullScreen;
@@ -452,7 +458,7 @@ public class RecordFBOActivity extends Activity implements SurfaceHolder.Callbac
         // Used for recording.
         private boolean mRecordingEnabled;
         private File mOutputFile;
-        private WindowSurface mInputWindowSurface;
+        private WindowSurface mInputWindowSurface; //编码器的输入EGLSurface
         private TextureMovieEncoder2 mVideoEncoder;
         private int mRecordMethod;
         private boolean mRecordedPrevious;
@@ -638,7 +644,7 @@ public class RecordFBOActivity extends Activity implements SurfaceHolder.Callbac
         }
 
         /**
-         * Prepares the off-screen framebuffer.
+         * Prepares the off-screen framebuffer. 使用PBO实现离屏缓冲
          */
         private void prepareFramebuffer(int width, int height) {
             GlUtil.checkGlError("prepareFramebuffer start");
@@ -652,7 +658,7 @@ public class RecordFBOActivity extends Activity implements SurfaceHolder.Callbac
             GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, mOffscreenTexture);
             GlUtil.checkGlError("glBindTexture " + mOffscreenTexture);
 
-            // Create texture storage.
+            // Create texture storage. 此处的纹理没有输入的像素源数据，所以是用来作为存储使用的
             GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES20.GL_RGBA, width, height, 0,
                     GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, null);
 
@@ -669,10 +675,10 @@ public class RecordFBOActivity extends Activity implements SurfaceHolder.Callbac
             GlUtil.checkGlError("glTexParameter");
 
             // Create framebuffer object and bind it.
-            GLES20.glGenFramebuffers(1, values, 0);
+            GLES20.glGenFramebuffers(1, values, 0); //创建帧缓冲区（FBO）
             GlUtil.checkGlError("glGenFramebuffers");
             mFramebuffer = values[0];    // expected > 0
-            GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, mFramebuffer);
+            GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, mFramebuffer); //切换帧缓冲区
             GlUtil.checkGlError("glBindFramebuffer " + mFramebuffer);
 
             // Create a depth buffer and bind it.
@@ -687,6 +693,7 @@ public class RecordFBOActivity extends Activity implements SurfaceHolder.Callbac
                     width, height);
             GlUtil.checkGlError("glRenderbufferStorage");
 
+            //用渲染缓冲区attach到FBO的深度附着点、用纹理attach到FBO的颜色附着点
             // Attach the depth buffer and the texture (color buffer) to the framebuffer object.
             GLES20.glFramebufferRenderbuffer(GLES20.GL_FRAMEBUFFER, GLES20.GL_DEPTH_ATTACHMENT,
                     GLES20.GL_RENDERBUFFER, mDepthBuffer);
@@ -875,13 +882,13 @@ public class RecordFBOActivity extends Activity implements SurfaceHolder.Callbac
             } else {
                 mRecordedPrevious = true;
 
-                // recording
+                // recording 绘制两次：1.绘制到SurfaceView   2.绘制到编码器的InputSurface，用于数据的编码
                 if (mRecordMethod == RECMETHOD_DRAW_TWICE) {
                     //Log.d(TAG, "MODE: draw 2x");
 
                     // Draw for display, swap.
                     draw();
-                    swapResult = mWindowSurface.swapBuffers();
+                    swapResult = mWindowSurface.swapBuffers(); //把数据上屏到SurfaceView
 
                     // Draw for recording, swap.
                     mVideoEncoder.frameAvailableSoon();
@@ -911,7 +918,7 @@ public class RecordFBOActivity extends Activity implements SurfaceHolder.Callbac
                     draw();
                     GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
                     mInputWindowSurface.setPresentationTime(timeStampNanos);
-                    mInputWindowSurface.swapBuffers();
+                    mInputWindowSurface.swapBuffers(); //把数据交给编码器处理
 
                     // Restore.
                     GLES20.glViewport(0, 0, mWindowSurface.getWidth(), mWindowSurface.getHeight());
@@ -924,7 +931,7 @@ public class RecordFBOActivity extends Activity implements SurfaceHolder.Callbac
                     draw();
 
                     mVideoEncoder.frameAvailableSoon();
-                    mInputWindowSurface.makeCurrentReadFrom(mWindowSurface);
+                    mInputWindowSurface.makeCurrentReadFrom(mWindowSurface); //把写Surface设置为编码器的InputSurface，把读Surface设置为SurfaceView的Surface
                     // Clear the pixels we're not going to overwrite with the blit.  Once again,
                     // this is excessive -- we don't need to clear the entire screen.
                     GLES20.glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
@@ -934,6 +941,7 @@ public class RecordFBOActivity extends Activity implements SurfaceHolder.Callbac
                             mWindowSurface.getHeight() + "  " + mVideoRect.left + "," +
                             mVideoRect.top + "," + mVideoRect.right + "," + mVideoRect.bottom +
                             "  COLOR_BUFFER GL_NEAREST");
+                    //这里是从读Surface（这里是SurfaceView的Surface，已有有数据了）把数据读出来，写入到写Surface（这里是编码器的InputSurface）
                     GLES30.glBlitFramebuffer(
                             0, 0, mWindowSurface.getWidth(), mWindowSurface.getHeight(),
                             mVideoRect.left, mVideoRect.top, mVideoRect.right, mVideoRect.bottom,
@@ -944,23 +952,23 @@ public class RecordFBOActivity extends Activity implements SurfaceHolder.Callbac
                                 Integer.toHexString(err));
                     }
                     mInputWindowSurface.setPresentationTime(timeStampNanos);
-                    mInputWindowSurface.swapBuffers();
+                    mInputWindowSurface.swapBuffers(); //交给编码器去处理
 
                     // Now swap the display buffer.
                     mWindowSurface.makeCurrent();
-                    swapResult = mWindowSurface.swapBuffers();
+                    swapResult = mWindowSurface.swapBuffers(); //真正的上屏
 
                 } else {
                     //Log.d(TAG, "MODE: offscreen + blit 2x");
                     // Render offscreen.
-                    GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, mFramebuffer);
+                    GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, mFramebuffer); //切换到自定义的帧缓冲区
                     GlUtil.checkGlError("glBindFramebuffer");
                     draw();
 
                     // Blit to display.
-                    GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
+                    GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0); //切换到默认的帧缓冲区（窗口系统）
                     GlUtil.checkGlError("glBindFramebuffer");
-                    mFullScreen.drawFrame(mOffscreenTexture, mIdentityMatrix);
+                    mFullScreen.drawFrame(mOffscreenTexture, mIdentityMatrix); //把draw生成的纹理作为资源，绘制到SurfaceView的Surface
                     swapResult = mWindowSurface.swapBuffers();
 
                     // Blit to encoder.
@@ -971,7 +979,7 @@ public class RecordFBOActivity extends Activity implements SurfaceHolder.Callbac
                     GLES20.glViewport(mVideoRect.left, mVideoRect.top,
                             mVideoRect.width(), mVideoRect.height());
                     mFullScreen.drawFrame(mOffscreenTexture, mIdentityMatrix);
-                    mInputWindowSurface.setPresentationTime(timeStampNanos);
+                    mInputWindowSurface.setPresentationTime(timeStampNanos); //把draw生成的纹理作为资源，绘制到编码器的InputSurface，用于编码
                     mInputWindowSurface.swapBuffers();
 
                     // Restore previous values.
@@ -1078,7 +1086,9 @@ public class RecordFBOActivity extends Activity implements SurfaceHolder.Callbac
             GLES20.glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
             GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
 
+            //绘制三角形
             mTri.draw(mProgram, mDisplayProjectionMatrix);
+            //绘制矩形
             mRect.draw(mProgram, mDisplayProjectionMatrix);
             for (int i = 0; i < 4; i++) {
                 if (false && mPreviousWasDropped) {

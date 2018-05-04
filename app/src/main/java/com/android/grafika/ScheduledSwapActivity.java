@@ -54,6 +54,8 @@ import java.lang.ref.WeakReference;
  * enhancements may cause the Choreographer-reported vsync time to be offset from the
  * actual-reported vsync time (which may itself be slightly offset from the actual-actual
  * vsync time).  None of this is terribly important unless you care about A/V sync.
+ *
+ * 这个要研究下：EGL的扩展能力
  */
 public class ScheduledSwapActivity extends Activity implements OnItemSelectedListener,
         SurfaceHolder.Callback, Choreographer.FrameCallback {

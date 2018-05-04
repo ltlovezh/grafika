@@ -41,6 +41,7 @@ import java.nio.ByteOrder;
 
 /**
  * Basic glReadPixels() speed test.
+ * 测试GLES20.glReadPixels的读取效率
  */
 public class ReadPixelsActivity extends Activity {
     private static final String TAG = MainActivity.TAG;

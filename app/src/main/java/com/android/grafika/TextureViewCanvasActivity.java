@@ -35,9 +35,11 @@ import android.graphics.SurfaceTexture;
  * As part of experimenting with the framework, this allows the renderer thread to continue
  * to run as the TextureView is being destroyed (we stop the thread in onDestroy() rather
  * than onPause()).  Normally the renderer would be stopped when the application pauses.
+ *
+ * 通过surface.lockCanvas、surface.unlockCanvasAndPost这种方式尽可能快的渲染，onSurfaceTextureUpdated可以到60fps
  */
 public class TextureViewCanvasActivity extends Activity {
-    private static final String TAG = MainActivity.TAG;
+    private static final String TAG = "TextureViewCanvasActivity";
 
     private TextureView mTextureView;
     private Renderer mRenderer;
@@ -149,6 +151,7 @@ public class TextureViewCanvasActivity extends Activity {
 
             boolean partial = false;
             while (true) {
+                long startTime = System.currentTimeMillis();
                 Rect dirty = null;
                 if (partial) {
                     // Set a dirty rect to confirm that the feature is working.  It's
@@ -198,6 +201,9 @@ public class TextureViewCanvasActivity extends Activity {
                     Log.d(TAG, "change direction");
                     xdir = -xdir;
                 }
+
+                long endTime = System.currentTimeMillis();
+                Log.e(TAG, "one frame cost : " + (endTime - startTime));
             }
 
             surface.release();
@@ -243,7 +249,7 @@ public class TextureViewCanvasActivity extends Activity {
 
         @Override   // will be called on UI thread
         public void onSurfaceTextureUpdated(SurfaceTexture st) {
-            //Log.d(TAG, "onSurfaceTextureUpdated");
+            Log.d(TAG, "onSurfaceTextureUpdated");
         }
     }
 }

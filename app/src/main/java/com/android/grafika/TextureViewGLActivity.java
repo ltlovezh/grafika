@@ -51,9 +51,11 @@ import com.android.grafika.gles.WindowSurface;
  * As part of experimenting with the framework, this allows the renderer thread to continue
  * to run as the TextureView is being destroyed (we stop the thread in onDestroy() rather
  * than onPause()).  Normally the renderer would be stopped when the application pauses.
+ *
+ * 通过OpenGL这种方式尽可能快的渲染（渲染线程疯狂draw、swap的情况下），onSurfaceTextureUpdated也无法达到60fps（小米5可以，mix2、小米6不可以，这个结论和弹幕库模式下的结论完全反过来了呀）
  */
 public class TextureViewGLActivity extends Activity {
-    private static final String TAG = MainActivity.TAG;
+    private static final String TAG = "TextureViewGLActivity";
 
     // Experiment with allowing TextureView to release the SurfaceTexture from the callback vs.
     // releasing it explicitly ourselves from the draw loop.  The latter seems to be problematic
@@ -203,6 +205,8 @@ public class TextureViewGLActivity extends Activity {
                     }
                 }
 
+                long startTime = System.currentTimeMillis();
+
                 // Still alive, render a frame.
                 GLES20.glClearColor(clearColor, clearColor, clearColor, 1.0f);
                 GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
@@ -219,6 +223,9 @@ public class TextureViewGLActivity extends Activity {
                 //
                 // If the SurfaceTexture has been destroyed, this will throw an exception.
                 eglSurface.swapBuffers();
+
+                long endTime = System.currentTimeMillis();
+                Log.e(TAG, "one frame cost : " + (endTime - startTime));
 
                 // Advance state
                 clearColor += 0.015625f;
@@ -289,7 +296,7 @@ public class TextureViewGLActivity extends Activity {
 
         @Override   // will be called on UI thread
         public void onSurfaceTextureUpdated(SurfaceTexture st) {
-            //Log.d(TAG, "onSurfaceTextureUpdated");
+            Log.d(TAG, "onSurfaceTextureUpdated");
         }
     }
 }

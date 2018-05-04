@@ -96,7 +96,7 @@ public class DoubleDecodeActivity extends Activity {
     private static class VideoBlob implements TextureView.SurfaceTextureListener {
         private final String LTAG;
         private TextureView mTextureView;
-        private int mMovieTag;
+        private int mMovieTag; //播放哪个视频
 
         private SurfaceTexture mSavedSurfaceTexture;
         private PlayMovieThread mPlayThread;
